@@ -1,0 +1,101 @@
+{
+  "team": {
+    "name": "Acme Sales",
+    "slug": "acme",
+    "domain": "team.example.com",
+    "context": {
+      "description": "Acme Sales is a B2B SaaS company selling workflow automation to mid-market enterprises. The team focuses on outbound prospecting, discovery calls, and pipeline management.",
+      "industry": "B2B SaaS / workflow automation",
+      "target_market": "Mid-market companies with 100-2000 employees",
+      "key_verticals": ["financial services", "healthcare", "manufacturing"],
+      "product": {
+        "primary": "Workflow automation platform — automate repetitive business processes across departments",
+        "secondary": "Integration marketplace — connect to 200+ enterprise tools",
+        "value_prop": "Reduce operational costs by 30% while improving process compliance and visibility."
+      },
+      "sales_methodology": {
+        "framework": "MEDDICC + Challenger",
+        "meddicc_fields": ["Metrics", "Economic Buyer", "Decision Criteria", "Decision Process", "Implicate the Pain", "Champion", "Competition"],
+        "challenger_approach": "Lead with industry insight the prospect hasn't considered. Reframe manual processes as a competitive disadvantage.",
+        "qualification_threshold": "$5M revenue minimum, 50+ employees, identifiable process pain"
+      },
+      "typical_objections": [
+        "We already use Zapier / Make for automation",
+        "Our IT team builds custom integrations",
+        "We're in the middle of another software rollout",
+        "Budget is locked until next fiscal year"
+      ],
+      "objection_handling": "For existing tools: compare enterprise features (audit trails, compliance, role-based access). For IT-built: total cost of ownership analysis. For timing: offer a pilot program. For budget: ROI model showing payback within 6 months.",
+      "crm_schema_notes": {
+        "deal_stages": ["Identified", "Qualified", "Discovery", "Demo", "Proposal", "Negotiation", "Closed Won", "Closed Lost"],
+        "required_fields": ["Annual Revenue", "Employee Count", "Current Tools", "Decision Maker", "Champion", "MEDDICC Score", "Primary Vertical", "Pain Points"],
+        "custom_fields": {
+          "MEDDICC Score": "0-7 integer (one point per MEDDICC element confirmed)",
+          "Process Volume": "number of processes candidate for automation",
+          "ARR Potential": "estimated annual contract value",
+          "Vertical Tag": "financial_services | healthcare | manufacturing | other"
+        }
+      },
+      "key_workflows": {
+        "prospect_enrichment": "Before any outreach: research the company (revenue, employee count, tech stack, vertical context). Build a preliminary ROI estimate. Add to CRM with MEDDICC pre-filled as much as possible from public info.",
+        "stale_deal_alerts": "Daily scan of CRM for deals where last activity > 14 days. Surface them in morning briefing. Flag if decision timeline has passed without movement.",
+        "meddicc_tracking": "After every call: update CRM notes with which MEDDICC elements were confirmed, disputed, or still unknown. Recalculate MEDDICC Score.",
+        "demo_prep": "Before scheduled demos: pull prospect info from CRM, research recent company news, prepare tailored talking points, create a one-pager with relevant case studies."
+      },
+      "competitive_context": {
+        "main_competitors": ["Zapier (SMB-focused)", "Make (mid-market)", "ServiceNow (enterprise)", "Microsoft Power Automate (Microsoft shops)"],
+        "differentiation": "Purpose-built for mid-market. Faster time-to-value than enterprise tools. More governance than SMB tools. Industry-specific templates."
+      },
+      "seasonal_rhythm": "Q4 is budget season — good time for year-end deals. Q1 is new fiscal year — teams evaluating new tools. Summer tends to be slower (vacations, delayed decisions).",
+      "brand_voice": "Professional, consultative, insight-led. Lead with the prospect's pain, not your features. Never pushy. Frame everything as a business outcome."
+    }
+  },
+  "infrastructure": {
+    "provider": "digitalocean",
+    "region": "nyc1",
+    "size": "s-2vcpu-4gb"
+  },
+  "features": {
+    "crm": true,
+    "google_workspace": true,
+    "team_coordinator": true,
+    "onepassword": false,
+    "channels": ["web", "telegram"]
+  },
+  "members": [
+    {
+      "name": "Alice",
+      "slug": "alice",
+      "port": 3001,
+      "type": "member",
+      "role": "Account Executive",
+      "gws_email": "alice-pa@team.example.com"
+    },
+    {
+      "name": "Bob",
+      "slug": "bob",
+      "port": 3006,
+      "type": "member",
+      "role": "Sales Development Rep",
+      "gws_email": "bob-pa@team.example.com"
+    },
+    {
+      "name": "Carol",
+      "slug": "carol",
+      "port": 3011,
+      "type": "member",
+      "role": "Customer Success Manager",
+      "gws_email": "carol-pa@team.example.com"
+    }
+  ],
+  "team_pa": {
+    "slug": "team-acme",
+    "port": 3016
+  },
+  "pre_approved_actions": [
+    "Update CRM contact notes after meetings",
+    "Flag stale deals in daily briefing",
+    "Draft prospect enrichment summaries",
+    "Prepare demo talking points from CRM data"
+  ]
+}

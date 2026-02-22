@@ -1,0 +1,35 @@
+# MyPA PA Gateway Routing -- Caddy config block
+#
+# This template is used by onboard-team.sh to expose PA OpenClaw gateways
+# via Tailscale Funnel. Caddy listens on localhost:18789, Tailscale Funnel
+# forwards public HTTPS traffic here.
+#
+# Each PA gets a path-based route: /<pa-name>/* -> container gateway port
+# Caddy strips the path prefix before proxying (handle_path).
+#
+# Usage: onboard-team.sh appends a handle_path block per PA, then reloads Caddy.
+#
+# Tailscale Funnel setup (run once):
+#   tailscale funnel --bg 18789
+#
+# PA gateway URLs take the form:
+#   wss://<tailscale-hostname>/<pa-name>/
+
+:18789 {
+	# SECURITY: Strip Tailscale identity headers from all incoming requests.
+	# Only Tailscale Serve (which bypasses Caddy) should inject these.
+	# Prevents header forgery auth bypass from public internet clients.
+	request_header -Tailscale-User-Login
+	request_header -Tailscale-User-Name
+	request_header -Tailscale-User-Login-Raw
+	request_header -Tailscale-User-Profile-Pic
+
+	# Per-PA gateway routes are appended below by onboard-team.sh
+	# Example:
+	#   handle_path /alice-acme-pa/* {
+	#       reverse_proxy localhost:3001
+	#   }
+
+	# Fallback: return 404 for unknown paths
+	respond "Unknown PA gateway path" 404
+}

@@ -1,0 +1,104 @@
+name: predeployment-gate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate shell scripts
+        run: |
+          bash -n scripts/provision-pa.sh
+          bash -n scripts/validate-week1.sh
+          bash -n scripts/validate-antfarm-workflow.sh
+          bash -n scripts/install-antfarm.sh
+          bash -n scripts/setup-github-gates.sh
+          bash -n scripts/backup-pas.sh
+          bash -n scripts/pactl.sh
+          bash -n scripts/bootstrap-droplet.sh
+          bash -n scripts/healthcheck.sh
+          bash -n scripts/onboard-team.sh
+
+      - name: Install yq for Antfarm workflow validation
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Run Week 1 pre-deployment validation
+        run: |
+          bash scripts/validate-week1.sh
+
+      - name: Validate Antfarm workflow contract
+        run: |
+          bash scripts/validate-antfarm-workflow.sh
+
+      - name: Enforce required docs for deployment checks
+        run: |
+          test -f docs/WEEK1_VALIDATION.md
+          grep -q "scripts/validate-week1.sh" docs/ONBOARDING_RUNBOOK.md
+
+      - name: Validate PROJECT_STATE.md context integrity
+        run: |
+          test -f docs/PROJECT_STATE.md || { echo "FAIL: docs/PROJECT_STATE.md missing"; exit 1; }
+
+          # Required sections that must exist for session continuity
+          required_sections=(
+            "## Deployment State"
+            "## Architecture Decisions"
+            "### Admin CRM"
+            "### Container Naming Convention"
+            "### Agent Config Format"
+            "### Security Model"
+            "### Auth Strategy"
+            "## Provisioning Workflow"
+            "### Team Provisioning"
+            "### Team Member Provisioning"
+            "## Remaining Interactive Steps"
+            "## File Inventory"
+            "## Version History"
+          )
+
+          missing=0
+          for section in "${required_sections[@]}"; do
+            if ! grep -qF "$section" docs/PROJECT_STATE.md; then
+              echo "FAIL: Missing required section: $section"
+              missing=$((missing + 1))
+            fi
+          done
+
+          if [ "$missing" -gt 0 ]; then
+            echo "$missing required sections missing from PROJECT_STATE.md"
+            exit 1
+          fi
+
+          echo "PROJECT_STATE.md: all $((${#required_sections[@]})) required sections present"
+
+      - name: Validate provisioning workflow completeness
+        run: |
+          # Every script referenced in PROJECT_STATE.md must exist
+          for script in scripts/bootstrap-droplet.sh scripts/provision-pa.sh \
+                        scripts/pactl.sh scripts/backup-pas.sh scripts/healthcheck.sh \
+                        scripts/install-antfarm.sh scripts/validate-week1.sh \
+                        scripts/onboard-team.sh; do
+            test -f "$script" || { echo "FAIL: $script referenced in PROJECT_STATE.md but missing"; exit 1; }
+          done
+
+          # Every template referenced must exist
+          for tmpl in templates/pa-default/openclaw.json templates/pa-default/SOUL.md \
+                      templates/pa-default/IDENTITY.md templates/pa-default/model-router-config.json \
+                      templates/pa-admin/openclaw.json templates/pa-admin/SOUL.md \
+                      templates/caddy/pa-gateway.caddy.tmpl; do
+            test -f "$tmpl" || { echo "FAIL: $tmpl referenced in PROJECT_STATE.md but missing"; exit 1; }
+          done
+
+          echo "All referenced scripts and templates exist"

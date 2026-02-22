@@ -1,0 +1,122 @@
+{
+  "$schema": "https://docs.openclaw.ai/schema/openclaw.json",
+  "_comment": "MyPA Golden Template -- Team Member PA. All PAs are provisioned from this file. Do not modify per-PA; use environment variables for PA-specific values.",
+
+  "gateway": {
+    "bind": "127.0.0.1",
+    "port": 3000,
+    "auth": {
+      "mode": "token",
+      "token": "${PA_GATEWAY_TOKEN}",
+      "allowTailscale": true,
+      "rateLimit": {
+        "maxAttempts": 10,
+        "windowMs": 60000,
+        "lockoutMs": 300000
+      }
+    },
+    "controlUi": {
+      "_comment": "Device auth disabled until Tailscale identity auth is implemented. All access is behind Caddy + Tailscale on the host. TODO: replace with proper Tailscale auto-approval when OpenClaw supports it natively.",
+      "dangerouslyDisableDeviceAuth": true,
+      "allowInsecureAuth": true
+    },
+    "trustedProxies": ["127.0.0.1", "${DOCKER_BRIDGE_GATEWAY}"],
+    "tailscale": {
+      "mode": "off",
+      "resetOnExit": false
+    }
+  },
+
+  "discovery": {
+    "mdns": { "mode": "off" }
+  },
+
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "dmPolicy": "pairing",
+      "groupPolicy": "disabled",
+      "configWrites": false
+    },
+    "slack": {
+      "_comment": "Enable per-team. PA joins team Slack channels for collaborative communication.",
+      "enabled": false,
+      "botToken": "${SLACK_BOT_TOKEN}",
+      "appToken": "${SLACK_APP_TOKEN}",
+      "dmPolicy": "pairing",
+      "channelPolicy": "allowed",
+      "configWrites": false
+    }
+  },
+
+  "agents": {
+    "defaults": {
+      "_model_comment": "Uses native Anthropic auth. Run: openclaw models auth setup-token (after claude auth login in VNC)",
+      "_tools_note": "tools removed from agents.defaults -- causes crash loops on v2026.2.19+. Tool config is applied post-onboard via docker exec python3 on the live openclaw.json. See provision-pa.sh for the injection pattern.",
+      "memorySearch": {
+        "extraPaths": ["${TEAM_DOCS_PATH}"]
+      },
+      "sandbox": {
+        "mode": "off",
+        "workspaceAccess": "full"
+      }
+    }
+  },
+
+  "plugins": {
+    "slots": { "memory": "memory-core" },
+    "entries": { "memory-core": { "enabled": true } }
+  },
+
+  "skills": {
+    "_note": "skills.gog is NOT a valid OpenClaw 2026.2.19 key -- causes crash loops. The GOG skill is installed via openclaw skills install after onboard.",
+    "installed": [
+      "jhumanj/twenty-crm"
+    ],
+    "autoUpdate": false
+  },
+
+  "cron": {
+    "_env_note": "IMPORTANT: GOG_KEYRING_PASSWORD and GOG_ACCOUNT must be set in ~/.bashrc AND passed explicitly in cron prompts. Cron jobs run in isolated sessions that do NOT inherit ~/.bashrc env vars.",
+    "jobs": [
+      {
+        "id": "morning-briefing",
+        "schedule": "30 5 * * *",
+        "_schedule_note": "5:30 AM EST daily -- adjust for PA timezone",
+        "prompt": "Set env: GOG_KEYRING_PASSWORD and GOG_ACCOUNT from ~/.bashrc if not already set. Compile morning briefing: 1) Check email inbox for anything since yesterday evening. 2) Check calendar for today. 3) Check Twenty CRM for updates or tasks. 4) Check ecosystem news. Send compiled briefing email to owner."
+      },
+      {
+        "id": "email-check",
+        "schedule": "*/10 5-23 * * *",
+        "_schedule_note": "Every 10 min, 5AM-11PM -- adjust for PA timezone",
+        "prompt": "Set env: GOG_KEYRING_PASSWORD and GOG_ACCOUNT from ~/.bashrc if not already set. Check email inbox for new unread messages. Triage per email-rules.yaml. If anything urgent or time-sensitive, summarize and alert owner. If nothing urgent, do not message."
+      },
+      {
+        "id": "afternoon-priorities",
+        "schedule": "0 14 * * *",
+        "_schedule_note": "2:00 PM EST daily -- adjust for PA timezone",
+        "prompt": "Set env: GOG_KEYRING_PASSWORD and GOG_ACCOUNT from ~/.bashrc if not already set. Compile afternoon priority summary: outstanding items, upcoming deadlines, anything needing owner attention. Send priority email to owner."
+      },
+      {
+        "id": "end-of-day-wrap",
+        "schedule": "0 17 * * *",
+        "_schedule_note": "5:00 PM EST daily -- adjust for PA timezone",
+        "prompt": "Set env: GOG_KEYRING_PASSWORD and GOG_ACCOUNT from ~/.bashrc if not already set. Compile end-of-day summary: what happened today, what's pending, tomorrow's calendar preview. Send wrap-up email to owner."
+      },
+      {
+        "id": "rag-index-refresh",
+        "schedule": "0 */6 * * *",
+        "prompt": "Run memory index and report any drift or new documents added since last indexing."
+      }
+    ]
+  },
+
+  "search": {
+    "provider": "brave",
+    "apiKey": "${BRAVE_API_KEY}"
+  },
+
+  "privacy": {
+    "telemetry": false
+  }
+}

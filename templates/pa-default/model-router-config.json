@@ -1,0 +1,6 @@
+{
+  "_removed": true,
+  "_comment": "model-router-config.json is OBSOLETE. The model-router skill was removed (2026-02-14). OpenClaw uses native Anthropic auth with a single model. No routing config needed.",
+  "_current_model": "Claude Sonnet 4.6 (default) / Claude Opus 4.6 (planning sessions)",
+  "_auth": "openclaw onboard --non-interactive --auth-choice token --token-provider anthropic --token 'sk-ant-oat01-...'"
+}

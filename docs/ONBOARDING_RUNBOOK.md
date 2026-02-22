@@ -1,0 +1,343 @@
+# PA Onboarding Runbook
+
+> Step-by-step guide for onboarding a new team member with a Personal AI Assistant.
+>
+> **Audience:** Platform admin or team lead with droplet access.
+
+---
+
+## Before You Start
+
+Gather this information for the new team member:
+
+| Item | Example | Where to Get It |
+|------|---------|-----------------|
+| Full name | Alice Smith | Team lead / HR |
+| Team name | Team Alpha | Org chart |
+| PA instance name | alice-pa | Convention: `firstname-pa` |
+| PA email | alicepa@yourdomain.com | Create in Google Workspace Admin |
+| Telegram bot token | 123456:ABC-DEF... | Create via @BotFather (optional — iOS app is primary) |
+
+## Prerequisites Checklist
+
+- [ ] Google Workspace PA account created (`alicepa@yourdomain.com`)
+- [ ] Google Workspace license assigned (Business Starter)
+- [ ] Telegram bot created via @BotFather (optional — iOS app is primary channel)
+- [ ] Docker running on droplet
+- [ ] API keys available (Brave, Twenty CRM)
+
+---
+
+## Step 0: Required Week 1 pre-deployment validation
+
+If Antfarm is not installed on the host yet:
+
+```bash
+./scripts/install-antfarm.sh
+./scripts/validate-antfarm-workflow.sh
+```
+
+Before creating or changing production PAs, run:
+
+```bash
+bash scripts/validate-week1.sh
+```
+
+Required outputs:
+
+- Both templates parse as valid JSON
+- Admin template passes strict agent contract (`agents.list[]` + top-level `bindings[]`)
+- Legacy object-keyed format fails the strict contract check
+- Member and admin dry-run provisioning complete without API calls (`--dry-run`)
+
+If any agent-format check fails, run a live canary matrix on a disposable OpenClaw instance before proceeding. If both formats fail in live mode, follow `docs/WEEK1_VALIDATION.md` and check the OpenClaw changelog for parser/API changes.
+For repository governance, keep `predeployment-gate` required in branch protection (see `docs/GITHUB_ENTERPRISE_ENFORCEMENT.md`).
+
+## Step 1: Create the PA
+
+### Option A: Automated (Antfarm)
+
+```bash
+antfarm workflow run pa-provision \
+  "Alice Smith for Team Alpha, email alicepa@yourdomain.com"
+```
+
+The workflow will prompt for the Telegram bot token and handle the rest.
+
+### Option B: Script
+
+```bash
+./scripts/provision-pa.sh \
+  --name "alice-pa" \
+  --member "Alice Smith" \
+  --team "Team Alpha" \
+  --email "alicepa@yourdomain.com" \
+  --telegram-token "<TOKEN_FROM_BOTFATHER>" \
+  --type "member"
+```
+
+### Option C: Guided Script (Recommended)
+
+The `onboard-team.sh` script guides you through the entire team onboarding workflow,
+including CRM workspace setup, admin gateway config, PA provisioning, gateway exposure,
+and onboarding card generation.
+
+```bash
+# Interactive mode (prompts for each step)
+./scripts/onboard-team.sh
+
+# Non-interactive mode (all inputs from manifest file)
+./scripts/onboard-team.sh --manifest team.json
+
+# Resume after interruption
+./scripts/onboard-team.sh --resume
+
+# Dry run (validate only, no side effects)
+./scripts/onboard-team.sh --dry-run --manifest team.json
+```
+
+The script handles all member provisioning, generates gateway passwords, sets up
+Tailscale Funnel + Caddy routing, and produces onboarding cards for the iOS app.
+See `docs/ONBOARD_TEAM_PLAN.md` for the full design.
+
+### Option D: Manual (pactl)
+
+1. Create PA container: `./scripts/pactl.sh create alice-pa --member "Alice Smith" --team "Team Alpha"`
+2. Copy `templates/pa-default/openclaw.json` into the container config
+3. Copy `templates/pa-default/SOUL.md` into the container workspace
+4. Edit SOUL.md: replace `{{PA_NAME}}`, `{{MEMBER_NAME}}`, `{{TEAM_NAME}}`, `{{PA_EMAIL}}`
+5. Set environment variables (Brave, CRM)
+6. Start the container: `./scripts/pactl.sh start alice-pa`
+
+---
+
+## Step 1b: Verify Auto-Pairing Config
+
+OpenClaw auto-approves device pairing for connections arriving from `127.0.0.1` (localhost).
+Since all web UI traffic comes through Caddy on localhost, this means users are auto-paired
+on first connection — **as long as `trustedProxies` is NOT set**.
+
+**DO NOT** set `gateway.trustedProxies` in the PA config. This causes the gateway to read
+the `X-Forwarded-For` header and see the user's real IP instead of 127.0.0.1, which breaks
+auto-pairing and forces manual approval for every new device.
+
+Verify the config is correct:
+```bash
+docker exec <container> node openclaw.mjs config get gateway.trustedProxies
+# Should return: undefined or "Config path not found"
+```
+
+If it's set, remove it:
+```bash
+docker exec <container> node openclaw.mjs config unset gateway.trustedProxies
+docker restart <container>
+```
+
+**If manual approval is ever needed** (e.g., custom proxy setup where auto-pair doesn't work):
+```bash
+docker exec <container> node openclaw.mjs devices list
+docker exec <container> node openclaw.mjs devices approve <request-id>
+```
+
+---
+
+## Step 2: Connect via iOS App (Primary)
+
+The primary onboarding channel is the official OpenClaw iOS app, distributed via our
+TestFlight. No Telegram bot is required for this path.
+
+1. Send the team member their onboarding card (generated by `onboard-team.sh`):
+   - TestFlight install link
+   - Gateway URL: `wss://mypa-fleet.ts.net/<pa-name>/`
+   - Gateway password
+2. Member installs the app from TestFlight
+3. Opens app -> Settings -> Manual Gateway
+4. Enters the URL and password
+5. Taps Connect
+
+To verify: member sends "Hello" and gets a response from their PA.
+
+---
+
+## Step 2b: Add Telegram Channel (Optional)
+
+Telegram lets members message their PA from their phone. There are two setup flows
+depending on whether you want zero admin follow-up (allowlist) or simpler user steps (pairing).
+
+### What the member does (both options)
+
+1. Open Telegram → message **@BotFather**
+2. Send `/newbot`
+3. Choose a display name (e.g., `Alice PA`)
+4. Choose a username ending in `_bot` (e.g., `alice_pa_bot`)
+5. Copy the **bot token** BotFather sends back (looks like `7123456789:AAHxxx...`)
+
+### Option A: Allowlist (recommended — no admin follow-up)
+
+The member does one extra step:
+
+6. Message **@userinfobot** in Telegram — it replies with a numeric user ID
+7. Send both the **bot token** and **user ID** to the admin
+
+Admin injects both:
+```bash
+# On the fleet server
+CONTAINER=<pa-name>
+BOT_TOKEN="<token from BotFather>"
+USER_ID="<numeric user ID>"
+
+docker exec $CONTAINER python3 -c "
+import json
+with open('/home/node/.openclaw/openclaw.json') as f: c = json.load(f)
+c.setdefault('channels', {})['telegram'] = {
+  'enabled': True,
+  'botToken': '$BOT_TOKEN',
+  'dmPolicy': 'allowlist',
+  'allowFrom': ['$USER_ID'],
+  'groupPolicy': 'disabled',
+  'streamMode': 'partial'
+}
+with open('/home/node/.openclaw/openclaw.json', 'w') as f: json.dump(c, f, indent=2)
+"
+docker restart $CONTAINER
+```
+
+Member messages their bot — it works immediately. Only their Telegram account can use it.
+
+### Option B: Pairing (simpler user steps, one admin follow-up)
+
+Member sends only the **bot token** to admin.
+
+Admin injects it:
+```bash
+CONTAINER=<pa-name>
+BOT_TOKEN="<token from BotFather>"
+
+docker exec $CONTAINER python3 -c "
+import json
+with open('/home/node/.openclaw/openclaw.json') as f: c = json.load(f)
+c.setdefault('channels', {})['telegram'] = {
+  'enabled': True,
+  'botToken': '$BOT_TOKEN',
+  'dmPolicy': 'pairing',
+  'groupPolicy': 'disabled',
+  'streamMode': 'partial'
+}
+with open('/home/node/.openclaw/openclaw.json', 'w') as f: json.dump(c, f, indent=2)
+"
+docker restart $CONTAINER
+```
+
+Member messages the bot → gets a **pairing code** → sends it to admin.
+
+Admin approves:
+```bash
+docker exec $CONTAINER node openclaw.mjs pairing approve telegram <PAIRING_CODE>
+```
+
+### Verify
+
+Member sends "Hello" to the bot — PA responds.
+
+---
+
+## Step 3: Configure Google Workspace (gog)
+
+This requires interactive OAuth and must be done from the PA's terminal.
+
+1. Access the PA container terminal via VNC: `./scripts/pactl.sh vnc alice-pa`
+2. Run:
+   ```bash
+   gog auth credentials ~/client_secret.json
+   ```
+4. Complete the OAuth flow using the PA's Google Workspace email (`alicepa@yourdomain.com`)
+5. Test:
+   ```bash
+   gog gmail list        # Should show inbox
+   gog calendar today    # Should show today's events
+   ```
+
+---
+
+## Step 4: Verify CRM Access
+
+Ask the PA via Telegram:
+```
+Look up any contact in our CRM
+```
+
+Expected: PA queries Twenty CRM and returns results (or "no contacts found" if CRM is empty).
+
+---
+
+## Step 5: End-to-End Verification
+
+Send these test messages to the PA via the iOS app (or Telegram if configured):
+
+| # | Message | Expected Result |
+|---|---------|-----------------|
+| 1 | "What model are you running?" | Claude Sonnet 4.6 |
+| 2 | "Write a Python function to sort a list" | Returns code |
+| 3 | "Check my email" | Queries Gmail, summarizes inbox |
+| 4 | "What's on my calendar today?" | Queries Google Calendar |
+| 5 | "Look up Acme Corp in our CRM" | Queries Twenty CRM |
+| 6 | "Search the web for OpenClaw security best practices" | Uses Brave Search |
+| 7 | "/model status" | Shows Claude Sonnet 4.6 as active model |
+| 8 | "Run ls -la" | **Should refuse** (exec denied) |
+| 9 | "Install a new skill for me" | **Should refuse** (no config writes) |
+| 10 | "What do you remember about X?" | Tests RAG memory (memory-lancedb) |
+
+---
+
+## Step 6: Run Security Audit
+
+```bash
+openclaw security audit --deep
+```
+
+Verify OCSAS L2 compliance:
+- [ ] Gateway auth enabled
+- [ ] DM pairing active
+- [ ] Sandbox mode: non-main
+- [ ] Tool deny list applied
+- [ ] File permissions correct (700/600)
+
+---
+
+## Step 7: Brief the Team Member
+
+Send the team member their onboarding card (generated by `onboard-team.sh`) plus:
+
+1. What the PA can do (email, calendar, CRM, web search, coding help, long-term memory)
+2. What the PA cannot do (run commands, browse, install things)
+3. How to check model status (`/model status`)
+4. Morning briefing schedule (7:30 AM weekdays)
+5. How to request new capabilities (ask the admin)
+6. (Optional) Telegram bot username if configured as secondary channel
+
+---
+
+## Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| PA doesn't respond on Telegram | Check container status with `./scripts/pactl.sh status alice-pa`. Verify bot token. Check logs. |
+| "Model not available" errors | Re-run `claude auth login` + `openclaw models auth setup-token` inside container via VNC. |
+| Email/calendar not working | Re-run gog OAuth. Check Google Workspace account status. |
+| CRM queries fail | Check Twenty CRM is running. Verify API key. Test CRM endpoint directly. |
+| Security audit fails | Run `openclaw security audit --fix` then re-audit. |
+| PA tries to execute commands | Check openclaw.json tool deny list. Re-apply golden template. |
+| Morning briefing doesn't fire | Check cron job definition in openclaw.json. Verify timezone. |
+
+---
+
+## PA Removal
+
+If a team member leaves:
+
+1. Stop PA container: `./scripts/pactl.sh stop alice-pa`
+2. Export any important conversation history
+3. Remove the container: `./scripts/pactl.sh remove alice-pa`
+4. Revoke the Telegram bot token via @BotFather
+5. Suspend or delete the Google Workspace PA account
+6. Rotate any shared credentials the PA had access to

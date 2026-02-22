@@ -1,0 +1,8 @@
+{
+  "_comment": "Per-team CRM sync configuration. Controls which team workspaces sync records up to Admin Hub CRM.",
+  "_usage": "Deployed to /opt/mypa/team-sync-config.json on the droplet. Read by the CRM sync job.",
+  "rplogic_workspace_url": "https://crm.team.example.com",
+  "sync_interval_minutes": 15,
+  "sync_filters": ["contacts", "companies", "deals"],
+  "teams": {}
+}

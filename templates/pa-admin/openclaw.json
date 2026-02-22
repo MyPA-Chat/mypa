@@ -1,0 +1,150 @@
+{
+  "$schema": "https://docs.openclaw.ai/schema/openclaw.json",
+  "_comment": "MyPA Admin Multi-Agent Gateway. Runs the master PA + one sub-agent per team/business. All agents share one gateway process so sessions_send works between them.",
+
+  "agents": {
+    "list": [
+      {
+        "id": "admin-personal",
+        "default": true,
+        "name": "Personal",
+        "workspace": "~/.openclaw/workspace-personal",
+        "_comment": "Master PA -- cross-team command center"
+      }
+    ],
+    "_comment": "Add one agent block per team/business. Example: { \"id\": \"admin-alpha\", \"name\": \"Team Alpha\", \"workspace\": \"~/.openclaw/workspace-alpha\" }",
+
+    "defaults": {
+      "_model_comment": "Uses native Anthropic auth. Run: openclaw models auth setup-token (after claude auth login in VNC)",
+      "memorySearch": {
+        "extraPaths": ["${TEAM_DOCS_PATH}"]
+      },
+      "sandbox": {
+        "mode": "off",
+        "workspaceAccess": "full"
+      },
+      "tools": {
+        "enabled": [
+          "web_search",
+          "web_fetch",
+          "message",
+          "cron",
+          "image",
+          "sessions_list",
+          "sessions_history",
+          "sessions_send",
+          "exec",
+          "process",
+          "browser",
+          "apply_patch"
+        ],
+        "denied": [
+          "gateway"
+        ],
+        "elevated": {
+          "enabled": false
+        }
+      }
+    }
+  },
+
+  "bindings": [
+    {
+      "agentId": "admin-personal",
+      "match": { "channel": "telegram", "accountId": "personal" }
+    }
+  ],
+  "_bindings_comment": "Add one binding per team. Example: { \"agentId\": \"admin-alpha\", \"match\": { \"channel\": \"telegram\", \"accountId\": \"alpha\" } }",
+
+  "tools": {
+    "agentToAgent": {
+      "enabled": true,
+      "allow": ["*"]
+    }
+  },
+
+  "gateway": {
+    "bind": "127.0.0.1",
+    "port": 3000,
+    "auth": {
+      "mode": "token",
+      "token": "${PA_GATEWAY_TOKEN}",
+      "allowTailscale": true,
+      "rateLimit": {
+        "maxAttempts": 10,
+        "windowMs": 60000,
+        "lockoutMs": 300000
+      }
+    },
+    "controlUi": {
+      "_comment": "Device auth disabled until Tailscale identity auth is implemented. All access is behind Caddy + Tailscale on the host. TODO: replace with proper Tailscale auto-approval when OpenClaw supports it natively.",
+      "dangerouslyDisableDeviceAuth": true,
+      "allowInsecureAuth": true
+    },
+    "trustedProxies": ["127.0.0.1", "${DOCKER_BRIDGE_GATEWAY}"],
+    "tailscale": {
+      "mode": "off",
+      "resetOnExit": false
+    }
+  },
+
+  "discovery": {
+    "mdns": { "mode": "off" }
+  },
+
+  "channels": {
+    "telegram": {
+      "accounts": {
+        "personal": {
+          "botToken": "${ADMIN_PERSONAL_BOT_TOKEN}"
+        }
+      },
+      "_accounts_comment": "Add one account per team. Example: \"alpha\": { \"botToken\": \"${ADMIN_ALPHA_BOT_TOKEN}\" }",
+      "dmPolicy": "pairing",
+      "groupPolicy": "disabled",
+      "configWrites": false
+    }
+  },
+
+  "plugins": {
+    "slots": { "memory": "memory-core" },
+    "entries": { "memory-core": { "enabled": true } }
+  },
+
+  "skills": {
+    "installed": [
+      "openclaw/openclaw:gog",
+      "jhumanj/twenty-crm"
+    ],
+    "autoUpdate": false
+  },
+
+  "cron": {
+    "jobs": [
+      {
+        "id": "cross-team-briefing",
+        "schedule": "0 7 * * 1-5",
+        "prompt": "Compile cross-team morning briefing. For each team agent: use sessions_send to ask 'What is the status for today? Any urgent items, meetings, or deadlines?' Then check personal email and calendar. Compile everything into one unified briefing organized by team. Flag any cross-team conflicts or items needing attention."
+      },
+      {
+        "id": "personal-inbox-check",
+        "schedule": "0 */2 9-17 * * 1-5",
+        "prompt": "Check personal email inbox for new messages received in the last 2 hours. If there is anything urgent or time-sensitive, summarize and alert me. If nothing urgent, do not message me."
+      },
+      {
+        "id": "rag-index-refresh",
+        "schedule": "0 */6 * * *",
+        "prompt": "Run memory index and report any drift or new documents added since last indexing."
+      }
+    ]
+  },
+
+  "search": {
+    "provider": "brave",
+    "apiKey": "${BRAVE_API_KEY}"
+  },
+
+  "privacy": {
+    "telemetry": false
+  }
+}

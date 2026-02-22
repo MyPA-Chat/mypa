@@ -1,0 +1,26 @@
+[Unit]
+Description=MyPA Provisioning API
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=mypa
+Group=mypa
+WorkingDirectory=/opt/mypa/services/provisioning-api
+ExecStart=/usr/bin/node /opt/mypa/services/provisioning-api/server.js
+Restart=on-failure
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=true
+ProtectHome=read-only
+ProtectSystem=strict
+ReadWritePaths=/opt/mypa/caddy/sites
+PrivateTmp=true
+
+# Token loaded from environment file (managed by 1Password)
+EnvironmentFile=/opt/mypa/services/provisioning-api/.env
+
+[Install]
+WantedBy=multi-user.target

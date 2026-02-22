@@ -1,0 +1,139 @@
+# Antfarm Custom Workflow: PA Provisioning
+#
+# Usage:
+#   antfarm workflow run pa-provision "Alice Smith for Team Alpha, email alicepa@yourdomain.com"
+#
+# This workflow automates end-to-end PA provisioning using two agents:
+# a provisioner that creates and configures the instance, and a verifier
+# that validates everything works correctly.
+#
+# Prerequisites:
+#   - Antfarm installed (v0.4.1+)
+#   - pactl.sh and provision-pa.sh scripts available
+#   - Docker running on the droplet
+
+id: pa-provision
+name: Provision New Team PA
+description: >
+  End-to-end provisioning of a new Personal AI Assistant instance.
+  Creates the PA container via pactl, applies golden template, configures
+  skills and integrations, then verifies everything works.
+
+agents:
+  - id: provisioner
+    name: PA Provisioner
+    role: >
+      You create and configure new PA instances using the provision-pa.sh
+      script and pactl. You handle the mechanical setup: container
+      creation, template application, skill installation, and environment
+      configuration.
+    model: claude-sonnet-4-6
+
+  - id: verifier
+    name: PA Verifier
+    role: >
+      You validate that a newly provisioned PA is correctly configured
+      and secure. You run functional tests, security audits, and verify
+      all integrations work end-to-end. You do not fix problems — you
+      report them clearly so the provisioner can address them.
+    model: claude-sonnet-4-6
+
+variables:
+  - name: member_name
+    description: Full name of the team member
+    required: true
+  - name: team_name
+    description: Name of the team
+    required: true
+  - name: pa_name
+    description: PA instance name (e.g., alice-pa)
+    required: true
+  - name: pa_email
+    description: Google Workspace email for the PA
+    required: true
+  - name: telegram_token
+    description: Telegram bot token from @BotFather (optional)
+    required: false
+  - name: pa_type
+    description: PA type (member or admin)
+    default: member
+
+steps:
+  - id: create-instance
+    agent: provisioner
+    input: |
+      Run the PA provisioning script to create a new instance:
+
+      ./scripts/provision-pa.sh \
+        --name "{{pa_name}}" \
+        --member "{{member_name}}" \
+        --team "{{team_name}}" \
+        --email "{{pa_email}}" \
+        --type "{{pa_type}}"
+
+      Monitor the output. If any step fails, document the error clearly.
+      Do not proceed to the next step until the instance is running.
+
+  - id: verify-instance-running
+    agent: verifier
+    depends_on: [create-instance]
+    input: |
+      Verify the PA instance "{{pa_name}}" is running correctly:
+
+      1. Run: pactl status {{pa_name}} — is it running?
+      2. Check the applied openclaw.json matches the golden template
+      3. Verify SOUL.md is present and contains correct member/team names
+      4. Verify environment variables are set (keys should be present, not empty)
+
+      Report: PASS or FAIL for each check, with details on any failures.
+
+  - id: verify-skills
+    agent: verifier
+    depends_on: [verify-instance-running]
+    input: |
+      Verify all skills are installed and configured for PA "{{pa_name}}":
+
+      1. gog skill — installed? (OAuth will need manual setup, just check it's present)
+      2. twenty-crm skill — installed? Can it reach the CRM endpoint?
+      3. Cron jobs — are morning-briefing and inbox-check defined?
+      4. Model — verify Claude Sonnet 4.6 is the active model via native Anthropic auth
+
+      Report: PASS or FAIL for each check, with details on any failures.
+
+  - id: verify-security
+    agent: verifier
+    depends_on: [verify-skills]
+    input: |
+      Run security verification for PA "{{pa_name}}":
+
+      1. Run: openclaw security audit --deep
+      2. Check OCSAS L2 compliance (L3 if pa_type is admin):
+         - Gateway auth enabled (password mode)
+         - DM pairing active
+         - Session isolation (dmScope: per-channel-peer)
+         - Sandbox enabled (mode: non-main for member, all for admin)
+         - Tool deny list applied (exec, process, browser, apply_patch, gateway)
+         - File permissions 700/600
+      3. Verify denied tools actually deny:
+         - Ask PA to "run ls -la" → should refuse
+         - Ask PA to "open https://example.com in browser" → should refuse
+         - Ask PA to "install a new skill" → should refuse
+
+      Report: PASS or FAIL for each check. Any FAIL on security is a blocker.
+
+  - id: generate-report
+    agent: verifier
+    depends_on: [verify-security]
+    input: |
+      Compile a final provisioning report for PA "{{pa_name}}":
+
+      Instance: {{pa_name}}
+      Member: {{member_name}}
+      Team: {{team_name}}
+      Email: {{pa_email}}
+      Type: {{pa_type}}
+
+      Summarize all verification results from previous steps.
+      List any items that need manual follow-up (e.g., gog OAuth, Claude auth via VNC).
+
+      Output the report in a clear, actionable format.
