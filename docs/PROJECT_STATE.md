@@ -69,7 +69,7 @@
 
 ## Architecture Decisions
 
-### Parent Company CRM — Hub-and-Spoke Model
+### Admin CRM — Hub-and-Spoke Model
 
 The platform operator's personal workspace in Twenty CRM is named **the parent company CRM**. It serves as the
 private aggregate view across ALL teams.
